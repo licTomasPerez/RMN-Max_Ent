@@ -1,0 +1,220 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 44,
+   "id": "9c998351",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import qutip\n",
+    "import matplotlib.pyplot as plt \n",
+    "import numpy as np\n",
+    "import scipy.optimize as opt \n",
+    "import scipy.linalg as linalg\n",
+    "import pickle\n",
+    "import time as time\n",
+    "import math, cmath\n",
+    "import sys\n",
+    "#import proj_ev_library as projev\n",
+    "#import max_entev library as meev\n",
+    "\n",
+    "from IPython.display import display, Math, Latex"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 47,
+   "id": "cfe8d9c5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#import simpy no hace falta\n",
+    "\n",
+    "total_no_spins = 50 ### este es el nÃºmero de spines en el lattice\n",
+    "coherences_t0_pert0 = 1. ### el coeficiente I_m^0(t) inicial, son las coherencias a tiempo 0 sin perturbaciÃ³n. Modificar dsps.\n",
+    "coeff_list_t0 = [coherences_t0_pert0 + np.random.rand() for i in range(total_no_spins)] ### una configuraciÃ³n inicial \n",
+    "p = .5 ### el tÃ©rmino que pondera el avg del hamiltoniano del estado inicial con la perturbacion\n",
+    "#cmts_at_t0 = [1] + [np.random.rand() for i in range(49)]\n",
+    "\n",
+    "### Este mÃ³dulo construye la matrix que relaciona los coeficientes c_m(t). Es re contra fea pero it gets the job done\n",
+    "\n",
+    "def construct_M_matrix(coeff_list):\n",
+    "    m_matrix_list = []\n",
+    "    ith_cmt_list = []\n",
+    "    \n",
+    "    ### La ec de markov la podemos escribir como d/dt(C(t)) = -i/I_M^0(t) * M (C(t))\n",
+    "    \n",
+    "    ### la macana es que, con condiciones de borde libres, tengo que cargar a mano los dos primeros y dos Ãºltimos cm(t)s\n",
+    "    ### del lattice. Capaz con un condiciones periÃ³dicas, pensÃ¡ndo la lattice como un Toro T_1, queda mÃ¡s lindo.\n",
+    "    \n",
+    "    first_cmt_list = [(coeff_list[0+2]-coeff_list[0]) * np.e**(-0) - (coeff_list[0]) * np.e**(-0)\n",
+    "                       + p * np.e**(-0)]\n",
+    "    m_matrix_list.append(first_cmt_list)\n",
+    "    \n",
+    "    second_cmt_list = [(coeff_list[1+2]-coeff_list[1]) * np.e**(-1) - (coeff_list[1]) * np.e**(-1)\n",
+    "                       + p * np.e**(-1)]    \n",
+    "    m_matrix_list.append(first_cmt_list)\n",
+    "    \n",
+    "    for i in range(2, len(coeff_list) - 2):\n",
+    "        ith_cmt_list = [(coeff_list[i+2]-coeff_list[i]) * np.e**(-m) + (coeff_list[i-2]-coeff_list[i]) * np.e**(-m)\n",
+    "                       + p * np.e**(-m)]\n",
+    "        m_matrix_list.append(ith_cmt_list)\n",
+    "        ith_cmt_list = []\n",
+    "    \n",
+    "    penultimate_cmt_list = [(coeff_list[M-2+2-1]-coeff_list[M-2-1]) * np.e**(-(M-2-1)) \n",
+    "                            - (coeff_list[M-2-2-1]-coeff_list[M-2-1]) * np.e**(-(M-2-1))\n",
+    "                       + p * np.e**(-(M-2-1))]\n",
+    "    m_matrix_list.append(penultimate_cmt_list)\n",
+    "    \n",
+    "    ultimate_cmt_list = [-(coeff_list[M-1]) * np.e**(-(M-1)) \n",
+    "                            - (coeff_list[M-1-2]-coeff_list[M-1]) * np.e**(-(M-1))\n",
+    "                       + p * np.e**(-(M-1))]\n",
+    "    m_matrix_list.append(ultimate_cmt_list)\n",
+    "    m_matrix = np.array(m_matrix_list)\n",
+    "    \n",
+    "    return m_matrix#, m_matrix_list\n",
+    "\n",
+    "Mij_matrix = construct_M_matrix(coeff_list)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 48,
+   "id": "2b0111de",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([[-7.11189088e-01],\n",
+       "       [-7.11189088e-01],\n",
+       "       [-7.50340629e-02],\n",
+       "       [ 2.95456526e-02],\n",
+       "       [ 1.64887684e-01],\n",
+       "       [ 1.44649709e-01],\n",
+       "       [ 1.45767076e-01],\n",
+       "       [ 2.52969806e-02],\n",
+       "       [-5.55359248e-02],\n",
+       "       [ 1.71446892e-01],\n",
+       "       [ 1.78608150e-01],\n",
+       "       [-1.16885921e-01],\n",
+       "       [-1.16188860e-02],\n",
+       "       [ 1.41722745e-01],\n",
+       "       [-2.96633372e-02],\n",
+       "       [ 1.66966982e-01],\n",
+       "       [ 1.91483629e-01],\n",
+       "       [-8.17905483e-02],\n",
+       "       [ 1.02465796e-01],\n",
+       "       [ 1.35069893e-01],\n",
+       "       [ 2.88798129e-02],\n",
+       "       [ 1.03528912e-01],\n",
+       "       [ 1.05409905e-01],\n",
+       "       [ 3.61449435e-02],\n",
+       "       [-8.72903380e-04],\n",
+       "       [ 4.13558915e-02],\n",
+       "       [ 9.33766910e-02],\n",
+       "       [ 1.56989196e-01],\n",
+       "       [-1.98500860e-02],\n",
+       "       [-9.43796966e-02],\n",
+       "       [ 1.98001852e-01],\n",
+       "       [ 1.90254579e-01],\n",
+       "       [ 4.02359255e-02],\n",
+       "       [ 5.96460025e-02],\n",
+       "       [ 4.52730625e-03],\n",
+       "       [ 4.50084062e-02],\n",
+       "       [ 9.94160392e-02],\n",
+       "       [ 4.56937859e-03],\n",
+       "       [ 1.63818164e-01],\n",
+       "       [ 2.21750676e-01],\n",
+       "       [-8.15591795e-02],\n",
+       "       [-3.44249387e-02],\n",
+       "       [ 1.19574175e-01],\n",
+       "       [ 1.10321136e-01],\n",
+       "       [ 3.73412864e-02],\n",
+       "       [ 1.07731186e-02],\n",
+       "       [ 2.25771706e-01],\n",
+       "       [ 1.03238453e-01],\n",
+       "       [ 6.17562656e-04],\n",
+       "       [-9.48296166e-05]])"
+      ]
+     },
+     "execution_count": 48,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "Mij_matrix ### revisar porque no es una matriz"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 46,
+   "id": "242f314c",
+   "metadata": {},
+   "outputs": [
+    {
+     "ename": "ValueError",
+     "evalue": "shapes (50,1) and (50,) not aligned: 1 (dim 1) != 50 (dim 0)",
+     "output_type": "error",
+     "traceback": [
+      "\u001b[1;31m---------------------------------------------------------------------------\u001b[0m",
+      "\u001b[1;31mValueError\u001b[0m                                Traceback (most recent call last)",
+      "Input \u001b[1;32mIn [46]\u001b[0m, in \u001b[0;36m<cell line: 7>\u001b[1;34m()\u001b[0m\n\u001b[0;32m      4\u001b[0m     \u001b[38;5;28;01mreturn\u001b[39;00m H_tensor\u001b[38;5;241m.\u001b[39mdot(y)\u001b[38;5;241m/\u001b[39m(coherences_t0_pert0) \u001b[38;5;66;03m# * (-1j) primero busco de resolver una ec real que es mÃ¡s facil xd\u001b[39;00m\n\u001b[0;32m      6\u001b[0m ts\u001b[38;5;241m=\u001b[39mnp\u001b[38;5;241m.\u001b[39mlinspace(\u001b[38;5;241m0\u001b[39m,\u001b[38;5;241m1\u001b[39m,\u001b[38;5;241m200\u001b[39m)\n\u001b[1;32m----> 7\u001b[0m result \u001b[38;5;241m=\u001b[39m \u001b[43modeint\u001b[49m\u001b[43m(\u001b[49m\u001b[43mfunc\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43mF\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43my0\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43mcoeff_list_t0\u001b[49m\u001b[43m,\u001b[49m\u001b[43mt\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43mts\u001b[49m\u001b[43m,\u001b[49m\u001b[43margs\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43m(\u001b[49m\u001b[43mMij_matrix\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mcoherences_t0_pert0\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43m)\u001b[49m\u001b[43m)\u001b[49m\n\u001b[0;32m      8\u001b[0m plt\u001b[38;5;241m.\u001b[39mfigure(figsize\u001b[38;5;241m=\u001b[39m(\u001b[38;5;241m4\u001b[39m, \u001b[38;5;241m3\u001b[39m))\n\u001b[0;32m     10\u001b[0m \u001b[38;5;28;01mfor\u001b[39;00m i \u001b[38;5;129;01min\u001b[39;00m [\u001b[38;5;241m0\u001b[39m, \u001b[38;5;241m5\u001b[39m, \u001b[38;5;241m10\u001b[39m, \u001b[38;5;241m15\u001b[39m, \u001b[38;5;241m49\u001b[39m]:\n",
+      "File \u001b[1;32m~\\anaconda3\\lib\\site-packages\\scipy\\integrate\\odepack.py:241\u001b[0m, in \u001b[0;36modeint\u001b[1;34m(func, y0, t, args, Dfun, col_deriv, full_output, ml, mu, rtol, atol, tcrit, h0, hmax, hmin, ixpr, mxstep, mxhnil, mxordn, mxords, printmessg, tfirst)\u001b[0m\n\u001b[0;32m    239\u001b[0m t \u001b[38;5;241m=\u001b[39m copy(t)\n\u001b[0;32m    240\u001b[0m y0 \u001b[38;5;241m=\u001b[39m copy(y0)\n\u001b[1;32m--> 241\u001b[0m output \u001b[38;5;241m=\u001b[39m \u001b[43m_odepack\u001b[49m\u001b[38;5;241;43m.\u001b[39;49m\u001b[43modeint\u001b[49m\u001b[43m(\u001b[49m\u001b[43mfunc\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43my0\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mt\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43margs\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mDfun\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mcol_deriv\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mml\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mmu\u001b[49m\u001b[43m,\u001b[49m\n\u001b[0;32m    242\u001b[0m \u001b[43m                         \u001b[49m\u001b[43mfull_output\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mrtol\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43matol\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mtcrit\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mh0\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mhmax\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mhmin\u001b[49m\u001b[43m,\u001b[49m\n\u001b[0;32m    243\u001b[0m \u001b[43m                         \u001b[49m\u001b[43mixpr\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mmxstep\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mmxhnil\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mmxordn\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mmxords\u001b[49m\u001b[43m,\u001b[49m\n\u001b[0;32m    244\u001b[0m \u001b[43m                         \u001b[49m\u001b[38;5;28;43mint\u001b[39;49m\u001b[43m(\u001b[49m\u001b[38;5;28;43mbool\u001b[39;49m\u001b[43m(\u001b[49m\u001b[43mtfirst\u001b[49m\u001b[43m)\u001b[49m\u001b[43m)\u001b[49m\u001b[43m)\u001b[49m\n\u001b[0;32m    245\u001b[0m \u001b[38;5;28;01mif\u001b[39;00m output[\u001b[38;5;241m-\u001b[39m\u001b[38;5;241m1\u001b[39m] \u001b[38;5;241m<\u001b[39m \u001b[38;5;241m0\u001b[39m:\n\u001b[0;32m    246\u001b[0m     warning_msg \u001b[38;5;241m=\u001b[39m _msgs[output[\u001b[38;5;241m-\u001b[39m\u001b[38;5;241m1\u001b[39m]] \u001b[38;5;241m+\u001b[39m \u001b[38;5;124m\"\u001b[39m\u001b[38;5;124m Run with full_output = 1 to get quantitative information.\u001b[39m\u001b[38;5;124m\"\u001b[39m\n",
+      "Input \u001b[1;32mIn [46]\u001b[0m, in \u001b[0;36mF\u001b[1;34m(y, t, H_tensor, coherences_t0_pert0)\u001b[0m\n\u001b[0;32m      3\u001b[0m \u001b[38;5;28;01mdef\u001b[39;00m \u001b[38;5;21mF\u001b[39m(y, t, H_tensor, coherences_t0_pert0):\n\u001b[1;32m----> 4\u001b[0m     \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[43mH_tensor\u001b[49m\u001b[38;5;241;43m.\u001b[39;49m\u001b[43mdot\u001b[49m\u001b[43m(\u001b[49m\u001b[43my\u001b[49m\u001b[43m)\u001b[49m\u001b[38;5;241m/\u001b[39m(coherences_t0_pert0)\n",
+      "\u001b[1;31mValueError\u001b[0m: shapes (50,1) and (50,) not aligned: 1 (dim 1) != 50 (dim 0)"
+     ]
+    }
+   ],
+   "source": [
+    "from scipy.integrate import odeint\n",
+    "\n",
+    "def F(y, t, H_tensor, coherences_t0_pert0):\n",
+    "    return H_tensor.dot(y)/(coherences_t0_pert0) # * (-1j) primero busco de resolver una ec real que es mÃ¡s facil xd\n",
+    "\n",
+    "ts=np.linspace(0,1,200)\n",
+    "result = odeint(func=F, y0=coeff_list_t0,t=ts,args=(Mij_matrix, coherences_t0_pert0, ))\n",
+    "plt.figure(figsize=(4, 3))\n",
+    "\n",
+    "for i in [0, 5, 10, 15, 49]:\n",
+    "    plt.plot(result[i], label=r'$\\phi_{(%d)}(t)$'%i)\n",
+    "\n",
+    "plt.plot(result)\n",
+    "plt.xlabel(\"t\")\n",
+    "plt.ylabel(\"Phi(t)\")\n",
+    "plt.legend()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "684b22b5",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.12"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
