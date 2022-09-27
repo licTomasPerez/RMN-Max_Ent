@@ -1,10 +1,10 @@
 # In [1]:
 
 import qutip
-import matplotlib.pyplot as plt 
 import numpy as np
-import scipy.optimize as opt 
+import scipy.optimize as opt
 import scipy.linalg as linalg
+import sys
 import math, cmath
 
 # In [2]:
@@ -16,6 +16,8 @@ def generating_function_M_matrix(total_no_spins, cmt0_coeff_list, param_list, cb
     M = total_no_spins
     
     p = param_list[0]
+    
+    ### if open boundary conditions the matrix, some m+2 and m-2 elements dissapear for some values of m. 
     
     if not cbc:  
         for m in range(M):
