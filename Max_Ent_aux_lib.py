@@ -78,10 +78,28 @@ def diag_mm_matrix_elmt(cohrnc, time, power_law_factor):
             - B_mmminustwo_matrix_elmt(cohrnc, time, power_law_factor) 
             + p * C_m_matrix_elmt(cohrnc, time, power_law_factor))
 
-def generating_function_M_matrix(parameters, cmt0_coeff_list, time, cbc = False):
-    M = parameters["total_no_cohrs"]; p = parameters["p_factor"];  a = parameters["power_law_factor"]
-    cm_list = cmt0_coeff_list
-    m_matrix_list = []; t = time;
+def gen_func_complete_M_matrix(parameters, init_configurations, timespan, 
+                                          closed_boundary_conditions = False):
+    """
+    This matrix constructs the explicit sparse (triangular-like)
+    form of the M-matrix, wherein M_{m, m'} is the weight of 
+    the m-m' coherence term. It takes the following as input:
+    ***. a dictionary of parameter
+         **. where, in said dictionary,
+             1. the total number of coherences to be 
+                considered is explicited,
+             2. the strength of the Sigma-interaction 
+                Hamiltonian, labelled p,
+             3. and the power law factor for its submodules.
+    ***. an initial configuration for the coherences at time 0,
+    ***. a mesh for the times, 
+    ***. a boolean option, not implemented as of yet. 
+    
+    ===> Returns a real-valued, triangular-like sparse matrix.
+    """
+    M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
+    cm_list = init_configurations
+    m_matrix_list = []; t = timespan;
     
     for m in range(M):
         if m == 0:
@@ -106,6 +124,111 @@ def generating_function_M_matrix(parameters, cmt0_coeff_list, time, cbc = False)
             
     return qutip.Qobj(m_matrix_list)
 
+def gen_func_even_cohr_M_matrix(parameters, init_configurations, timespan, 
+                                          closed_boundary_conditions = False,
+                                          visualization = False,
+                                          as_qutip_qobj = False):
+    """
+    This module constructs the even-coherences weight matrix,
+    M, wherein M_{m, m'} is the weight of the m-m' coherence 
+    term, with both m and m' even numbered-coherences. The odd
+    coherences are disregardes for these do not factor into the 
+    M-matrix. It takes the following as input:
+    ***. a dictionary of parameters
+         **. where, in said dictionary,
+             1. the total number of even coherences to be 
+                considered is explicited,
+             2. the strength of the Sigma-interaction 
+                Hamiltonian, labelled p,
+             3. and the power law factor for its submodules.
+    ***. an initial configuration for the coherences at time 0,
+    ***. a mesh for the times, 
+    ***. a boolean option, not implemented as of yet. 
+    ***. a boolean option for visualizing a
+             1. plot of the M-matrix's eigenvalues,
+             2. and the M-matrix coefficients in a Hinton
+                diagram.
+    ***. a boolean option for returning the M-matrix as 
+         quantum object.     
+    
+        ===> Returns a real-valued matrix. 
+    *Note that his module does not return a sparse matrix. 
+    """
+    M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
+    cm_list = init_configurations
+    m_matrix_list = []; t = timespan;
+    
+    for m in range(M):
+        if m == 0:
+            m_matrix_list.append(np.array([A_mmplustwo_matrix_elmt(cohrnc = m, time = t, 
+                                                                   power_law_factor = a) + 
+                                           p * C_m_matrix_elmt(cohrnc = m, time = t, 
+                                                                   power_law_factor = a)] 
+                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, 
+                                                                   power_law_factor = a)] 
+                                          + [0 for i in range(M-2)]))
+        if (m > 0 and m < M-1):
+            list_with_zeros = [0 for i in range(m-1)]
+            m_matrix_list.append(np.array(list_with_zeros
+                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
+                                          + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
+                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, power_law_factor = a)]  
+                                          + [0 for i in range(M - (len(list_with_zeros)+3))]))
+        
+        if (m == M-1): 
+            print(m)
+            m_matrix_list.append(np.array([0 for i in range(M - 2)] 
+                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
+                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a) + 
+                                               p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]))
+    
+    ### test:
+    dimensions_equal_tot_no_cohr = [len(m_matrix_list) == M for i in range(len(m_matrix_list))]
+    assert (np.all(dimensions_equal_tot_no_cohr and len(m_matrix_list) == M)),"Error: M-matrix is not square"
+        
+    if visualization:
+        eigenvalues_list = linalg.eig(m_matrix_list)[0]
+        plt.scatter([i+1 for i in range(len(eigenvalues_list))], np.array(eigenvalues_list), label = "M-matrix's eigenvalues")
+        plt.matshow(m_matrix_list)
+        
+    if as_qutip_qobj:
+        try: 
+            m_matrix_list = qutip.Qobj(m_matrix_list)
+        except NameError:
+            print(NameError)
+        
+    return m_matrix_list
+
+def generating_function_complete_M_matrix(parameters, init_configurations, timespan, 
+                                          even_cohr_matrix_only = True):
+    """
+    This module construct the triangular-like matrix M,
+    whose exponential yields the solution to the Markovian
+    system of differential equations. It takes as parameters:
+    
+    ***. a dictionary of parameters, containing the total number 
+           of coherences, the p-factor due to the unperturbed 
+           Hamiltonian H_0, and the power-law factor.
+    ***. An initial coherences' configuration,
+    ***. A list of desired times 
+    ***. A boolean option, not-implemented as of yet.
+    """
+    
+    if even_cohr_matrix_only:
+        try:
+            m_matrix = gen_func_even_cohr_M_matrix(parameters, init_configurations, timespan, 
+                                          closed_boundary_conditions = False,
+                                          visualization = False,
+                                          as_qutip_qobj = False)
+        except NameError:
+            print(NameError)
+    else:
+        try: 
+            m_matrix = gen_func_complete_M_matrix(parameters, init_configurations, timespan, 
+                                          closed_boundary_conditions = False):
+    
+    return m_matrix
+
 def M_matrix_test(total_no_cohrs, M_tensor):
     """
     This module tests the triangular-like structure for the 
@@ -119,4 +242,4 @@ def M_matrix_test(total_no_cohrs, M_tensor):
         if (len(M_tensor[i]) != total_no_cohrs):
             print("Error on the ", i, "-th row. It has", len(M_tensor[i]), "elements")
         if (len(M_tensor[:,i]) != total_no_cohrs):
-            print("Error: The ", i, "-th column. It has", len(M_tensor[:,i], "elements")
+            print("Error: The ", i, "-th column. It has", len(M_tensor[:,i]), "elements")
