@@ -160,27 +160,34 @@ def gen_func_even_cohr_M_matrix(parameters, init_configurations, timespan,
     
     for m in range(M):
         if m == 0:
-            m_matrix_list.append(np.array([A_mmplustwo_matrix_elmt(cohrnc = m, time = t, 
+            local_array = np.array([A_mmplustwo_matrix_elmt(cohrnc = m, time = t, 
                                                                    power_law_factor = a) + 
                                            p * C_m_matrix_elmt(cohrnc = m, time = t, 
                                                                    power_law_factor = a)] 
                                           + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, 
                                                                    power_law_factor = a)] 
-                                          + [0 for i in range(M-2)]))
+                                          + [0 for i in range(M-2)])
+            local_array = local_array/(sum(local_array))
+            m_matrix_list.append(local_array)
+            local_array = None
         if (m > 0 and m < M-1):
             list_with_zeros = [0 for i in range(m-1)]
-            m_matrix_list.append(np.array(list_with_zeros
+            local_array = np.array(list_with_zeros
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
                                           + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
                                           + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, power_law_factor = a)]  
-                                          + [0 for i in range(M - (len(list_with_zeros)+3))]))
-        
-        if (m == M-1): 
-            print(m)
-            m_matrix_list.append(np.array([0 for i in range(M - 2)] 
+                                          + [0 for i in range(M - (len(list_with_zeros)+3))])
+            local_array = local_array/(sum(local_array))
+            m_matrix_list.append(local_array)
+            local_array = None       
+        if (m == M-1):
+            local_array = np.array([0 for i in range(M - 2)] 
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a) + 
-                                               p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]))
+                                               p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)])
+            local_array = local_array/(sum(local_array))
+            m_matrix_list.append(local_array)
+            local_array = None
     
     ### test:
     dimensions_equal_tot_no_cohr = [len(m_matrix_list) == M for i in range(len(m_matrix_list))]
@@ -225,7 +232,9 @@ def generating_function_complete_M_matrix(parameters, init_configurations, times
     else:
         try: 
             m_matrix = gen_func_complete_M_matrix(parameters, init_configurations, timespan, 
-                                          closed_boundary_conditions = False):
+                                          closed_boundary_conditions = False)
+        except NameError:
+            print(NameError)
     
     return m_matrix
 
