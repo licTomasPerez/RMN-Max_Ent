@@ -9,77 +9,104 @@ import math, cmath
 
 # In [1]:
 
-### como sería la norma esta???
-
-def norm_at_timet(rho_M, time_t_minus_one):
-    return sum()
-
-def A_mmplustwo_matrix_elmt(cohrnc, time, power_law_factor = 1):
+def A_mmplustwo_matrix_elmt(cohrnc, time, power_law_factor = .5):
     """
     This module construct the weight of the m-th
-    coherence's interaction with the (m+2)-th coherence, 
+    coherence's interaction with the forward next-nearest-
+    neighbour (NNN) coherence, ie. the (m+2)-th coherence, 
     according to the unperturbed Hamiltonian H0. 
-    It takes the followings parameters as inputs:
+        It takes the followings parameters as inputs:
     
-    ***. the m-th coherence, labelled "cohrnc",
-    ***. the time t,
-    ***. and an optional real-valued power law factor for the 
-         time. 
+        ***. 1. cohrnc: the m-th coherence,
+        ***. 2. time: time
+        ***. 3. power_law_factor: a real valued number, 
+                                  between 0 and 1, 
+                                  which characterizes 
+                                  our approximation 
+                                  for the coherence's
+                                  time evolution as 
+                                  the exponential of 
+                                  a power law of time. 
     
-    It returns a real number. 
+     ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
+         
     """
     return np.e**(cohrnc * time**(-power_law_factor))
 
 def B_mmminustwo_matrix_elmt(cohrnc, time, power_law_factor):
     """
     This module construct the weight of the m-th
-    coherence's interaction with the (m-2)-th coherence, 
+    coherence's interaction with the previous next-nearest-
+    neighbour (NNN) coherence, ie. the (m-2)-th coherence, 
     according to the unperturbed Hamiltonian H0. 
-    It takes the followings parameters as inputs:
+        It takes the followings parameters as inputs:
     
-    ***. the m-th coherence, labelled "cohrnc",
-    ***. the time t,
-    ***. and an optional real-valued power law factor for the 
-         time. 
+        ***. 1. cohrnc: the m-th coherence,
+        ***. 2. time: time
+        ***. 3. power_law_factor: a real valued number, 
+                                  between 0 and 1, 
+                                  which characterizes 
+                                  our approximation 
+                                  for the coherence's
+                                  time evolution as 
+                                  the exponential of 
+                                  a power law of time. 
     
-    It returns a real number. 
+     ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
+         
     """
     return np.e**(cohrnc * time**(-power_law_factor))
 
 def C_m_matrix_elmt(cohrnc, time, power_law_factor):
     """
-    This module construct the m-th coherence's self-
-    interaction, associated with the perturbation Hamiltonian
-    Sigma. It takes as parameters,
+    This module construct the diagonal interactions corresponding
+    to the m-th's coherence <<self-interaction>>,
+    associated with the perturbation Hamiltonian Sigma. 
+        It takes the followings parameters as inputs:
     
-    ***. the m-th coherence, labelled "cohrnc",
-    ***. the time t,
-    ***. and an optional real-valued power law factor for the 
-         time. 
+        ***. 1. cohrnc: the m-th coherence,
+        ***. 2. time: time
+        ***. 3. power_law_factor: a real valued number, 
+                                  between 0 and 1, 
+                                  which characterizes 
+                                  our approximation 
+                                  for the coherence's
+                                  time evolution as 
+                                  the exponential of 
+                                  a power law of time. 
+    
+     ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
     
     It returns a real number. 
     """
     return cohrnc * np.e**(cohrnc * time**(-power_law_factor))
 
-def diag_mm_matrix_elmt(cohrnc, time, power_law_factor):
+def diag_mm_matrix_elmt(cohrnc, time, power_law_factor, p):
     """
     This module constructs the effective self-interaction for 
     the m-th coherence, due to both the unperturbed and the
-    perturbation Hamiltonians. It takes as parameters:
+    perturbation Hamiltonians. 
+        It takes the followings parameters as inputs:
     
-    ***. the m-th coherence, labelled "cohrnc",
-    ***. the time t,
-    ***. and an optional real-valued power law factor for the 
-         time. 
-         
-    It returns a real number.
+        ***. 1. cohrnc: the m-th coherence,
+        ***. 2. time: time
+        ***. 3. power_law_factor: a real valued number, 
+                                  between 0 and 1, 
+                                  which characterizes 
+                                  our approximation 
+                                  for the coherence's
+                                  time evolution as 
+                                  the exponential of 
+                                  a power law of time. 
+    
+     ===> It returns a real number: 
     """
     return (-A_mmplustwo_matrix_elmt(cohrnc, time, power_law_factor)
             - B_mmminustwo_matrix_elmt(cohrnc, time, power_law_factor) 
             + p * C_m_matrix_elmt(cohrnc, time, power_law_factor))
 
-def gen_func_complete_M_matrix(parameters, init_configurations, timespan, 
-                                          closed_boundary_conditions = False):
+def legacy_gen_func_complete_M_matrix(parameters, timet, 
+                                           closed_boundary_conditions = False):
     """
     This matrix constructs the explicit sparse (triangular-like)
     form of the M-matrix, wherein M_{m, m'} is the weight of 
@@ -101,33 +128,35 @@ def gen_func_complete_M_matrix(parameters, init_configurations, timespan,
     cm_list = init_configurations
     m_matrix_list = []; t = timespan;
     
+    timet = t
+    
     for m in range(M):
         if m == 0:
-            m_matrix_list.append(np.array([diag_mm_matrix_elmt(m,t,a)] + [0]
+            m_matrix_list.append(np.array([diag_mm_matrix_elmt(m,t,a, p)] + [0]
                                     + [A_mmplustwo_matrix_elmt(m+2,t,a)] + [0 for k in range(M-3)])) 
         if m == 1:
-            local_list = [0] + [diag_mm_matrix_elmt(m,t,a)] + [0] + [A_mmplustwo_matrix_elmt(m+2, t, a)]
+            local_list = [0] + [diag_mm_matrix_elmt(m,t,a,p)] + [0] + [A_mmplustwo_matrix_elmt(m+2, t, a)]
             local_length = len(np.array(local_list))
             m_matrix_list.append(local_list + [0 for k in range(M-local_length)])
         if (m > 1) and (m < M - 2):  
             local_list = [0 for j in range(m-2)]; local_length = len(local_list)
-            local_list += ([B_mmminustwo_matrix_elmt(-m-2,t,a)] + [0] + [diag_mm_matrix_elmt(m,t,a)] + [0] 
+            local_list += ([B_mmminustwo_matrix_elmt(-m-2,t,a)] + [0] + [diag_mm_matrix_elmt(m,t,a,p)] + [0] 
                         + [A_mmplustwo_matrix_elmt(m+2,t,a)])
             local_list += [0 for j in range(M-local_length - 5)]
             m_matrix_list.append(np.array(local_list))
         if m == M - 2: 
             m_matrix_list.append(np.array([0 for i in range(m-2)] + [B_mmminustwo_matrix_elmt(-m-2,t,a)] + [0] 
-                                 + [diag_mm_matrix_elmt(m,t,a)] + [0]))
+                                 + [diag_mm_matrix_elmt(m,t,a,p)] + [0]))
         if m == M - 1:
             m_matrix_list.append(np.array([0 for i in range(m-2)] + [B_mmminustwo_matrix_elmt(-m-2,t,a)] + [0] 
-                                 + [diag_mm_matrix_elmt(m,t,a)]))
+                                 + [diag_mm_matrix_elmt(m,t,a,p)]))
             
     return qutip.Qobj(m_matrix_list)
 
-def gen_func_even_cohr_M_matrix(parameters, init_configurations, timespan, 
-                                          closed_boundary_conditions = False,
-                                          visualization = False,
-                                          as_qutip_qobj = False):
+def gen_func_even_cohr_M_matrix(parameters, init_configurations, timet, 
+                                            closed_boundary_conditions = False,
+                                            visualization = False,
+                                            as_qutip_qobj = False):
     """
     This module constructs the even-coherences weight matrix,
     M, wherein M_{m, m'} is the weight of the m-m' coherence 
@@ -141,7 +170,6 @@ def gen_func_even_cohr_M_matrix(parameters, init_configurations, timespan,
              2. the strength of the Sigma-interaction 
                 Hamiltonian, labelled p,
              3. and the power law factor for its submodules.
-    ***. an initial configuration for the coherences at time 0,
     ***. a mesh for the times, 
     ***. a boolean option, not implemented as of yet. 
     ***. a boolean option for visualizing a
@@ -155,8 +183,7 @@ def gen_func_even_cohr_M_matrix(parameters, init_configurations, timespan,
     *Note that his module does not return a sparse matrix. 
     """
     M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
-    cm_list = init_configurations
-    m_matrix_list = []; t = timespan;
+    m_matrix_list = []; t = timet;
     
     for m in range(M):
         if m == 0:
@@ -174,7 +201,7 @@ def gen_func_even_cohr_M_matrix(parameters, init_configurations, timespan,
             list_with_zeros = [0 for i in range(m-1)]
             local_array = np.array(list_with_zeros
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
-                                          + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
+                                          + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a, p = p)] 
                                           + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, power_law_factor = a)]  
                                           + [0 for i in range(M - (len(list_with_zeros)+3))])
             local_array = local_array/(sum(local_array))
@@ -206,7 +233,7 @@ def gen_func_even_cohr_M_matrix(parameters, init_configurations, timespan,
         
     return m_matrix_list
 
-def generating_function_complete_M_matrix(parameters, init_configurations, timespan, 
+def choose_gen_func_M_matrix(parameters, init_configurations, timespan, 
                                           even_cohr_matrix_only = True):
     """
     This module construct the triangular-like matrix M,
@@ -245,10 +272,11 @@ def M_matrix_test(total_no_cohrs, M_tensor):
     ***. the total number of coherences,
     ***. and the M-matrix. 
     
-    It returns a boolean result.
+    It returns nothing but prints boolean result.
     """
     for i in range(len(M_tensor)):
         if (len(M_tensor[i]) != total_no_cohrs):
             print("Error on the ", i, "-th row. It has", len(M_tensor[i]), "elements")
         if (len(M_tensor[:,i]) != total_no_cohrs):
             print("Error: The ", i, "-th column. It has", len(M_tensor[:,i]), "elements")
+    return None
