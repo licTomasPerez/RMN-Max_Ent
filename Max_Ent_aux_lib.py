@@ -122,7 +122,7 @@ def legacy_gen_func_complete_M_matrix(parameters, timet,
     ***. a mesh for the times, 
     ***. a boolean option, not implemented as of yet. 
     
-    ===> Returns a real-valued, triangular-like sparse matrix.
+    ===> Returns a real valued, triangular-like sparse matrix.
     """
     M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
     cm_list = init_configurations
