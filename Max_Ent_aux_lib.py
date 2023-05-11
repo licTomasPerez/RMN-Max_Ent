@@ -31,7 +31,7 @@ def A_mmplustwo_matrix_elmt(cohrnc, time, power_law_factor = .5):
      ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
          
     """
-    return np.e**(cohrnc * time**(-power_law_factor))
+    return np.e**(-cohrnc * time**(1+power_law_factor))
 
 def B_mmminustwo_matrix_elmt(cohrnc, time, power_law_factor):
     """
@@ -55,7 +55,7 @@ def B_mmminustwo_matrix_elmt(cohrnc, time, power_law_factor):
      ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
          
     """
-    return np.e**(cohrnc * time**(-power_law_factor))
+    return np.e**(-cohrnc * time**(1+power_law_factor))
 
 def C_m_matrix_elmt(cohrnc, time, power_law_factor):
     """
@@ -79,7 +79,7 @@ def C_m_matrix_elmt(cohrnc, time, power_law_factor):
     
     It returns a real number. 
     """
-    return cohrnc * np.e**(cohrnc * time**(-power_law_factor))
+    return cohrnc * np.e**(-cohrnc * time**(1+power_law_factor))
 
 def diag_mm_matrix_elmt(cohrnc, time, power_law_factor, p):
     """
@@ -156,7 +156,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
                                                                    power_law_factor = a) + 
                                            p * C_m_matrix_elmt(cohrnc = m, time = t, 
                                                                    power_law_factor = a)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, 
+                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, 
                                                                    power_law_factor = a)] 
                                           + [0 for i in range(M-2)])
             local_array = local_array/(sum(local_array))
@@ -167,7 +167,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
             local_array = np.array(m_dimensional_zero_array + list_with_zeros
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
                                           + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a, p = p)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, power_law_factor = a)]  
+                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, power_law_factor = a)]  
                                           + [0 for i in range(M - (len(list_with_zeros)+3))])
             local_array = local_array/(sum(local_array))
             m_matrix_list.append(local_array)
@@ -187,7 +187,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
                                                                    power_law_factor = a) + 
                                            p * C_m_matrix_elmt(cohrnc = m, time = t, 
                                                                    power_law_factor = a)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, 
+                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, 
                                                                    power_law_factor = a)] 
                                           + [0 for i in range(M-2)]
                                 + m_dimensional_zero_array)
@@ -199,7 +199,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
             local_array = np.array(list_with_zeros
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
                                           + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a, p = p)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2, time = t, power_law_factor = a)]  
+                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, power_law_factor = a)]  
                                           + [0 for i in range(M - (len(list_with_zeros)+3))]
                                 + m_dimensional_zero_array)
             local_array = local_array/(sum(local_array))
@@ -223,6 +223,8 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
     else: 
         pass
     
+    m_matrix_list = np.asarray(m_matrix_list)
+    m_matrix_list = .5*(m_matrix_list + np.transpose(m_matrix_list)) 
     return m_matrix_list
 
 # In [3]:
@@ -230,6 +232,9 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
 def complex_differential_system(cohr_complex, t, parameters):
     Mtensor = Mtensor_2mx2m_dimensional_symplectic(parameters = parameters, init_configurations = cohr_complex, 
                                                    timet = t)
+    
+    Mtensor_loc = np.asarray(Mtensor)
+    Mtensor_loc = .5*(Mtensor + np.transpose(Mtensor)) 
     """
     This module sets up the system of (2M by 2M) real-valued coupled differential equations:
     M = [ 0^{M},  M^{1}
@@ -239,8 +244,8 @@ def complex_differential_system(cohr_complex, t, parameters):
         i d/dt              =                   . 
                 b^{M}(t)]      -M^{1},  0^{M}]     b^{M}(t)] 
            
-    where a^{M} is a M-dimensional vector, corresponding to the real part of the coherences vector c(t)
-          b^{M} is a M-dimensional vector, corresponding to the imaginary part of the coherences vector c(t) 
+    where a^{M} is a M-dimensional vector, corresponding to the real part of the coherences vector c(t),
+          b^{M} is a M-dimensional vector, corresponding to the imaginary part of the coherences vector c(t),
           0^{M} is a null M-dimensional vector,
           and where M^{1} is the (M by M)-dimensional M-matrix written in equation (1).
     
@@ -258,4 +263,4 @@ def complex_differential_system(cohr_complex, t, parameters):
                      previous equation written in this module's documentation. 
     
     """
-    return Mtensor @ cohr_complex
+    return Mtensor_loc @ cohr_complex
