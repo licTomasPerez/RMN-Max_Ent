@@ -105,7 +105,102 @@ def diag_mm_matrix_elmt(cohrnc, time, power_law_factor, p):
             - B_mmminustwo_matrix_elmt(cohrnc, time, power_law_factor) 
             + p * C_m_matrix_elmt(cohrnc, time, power_law_factor))
 
+def normalization_factor(total_no_cohr, time, power_law_factor):
+    """
+    This module returs a normalization for the coherences
+    """
+    return sum(np.e**(-m*time**(1+power_law_factor)) for m in range(total_no_cohr))
+
 # In [2]:
+
+def gen_func_even_cohr_M_matrix(parameters, init_configurations, timet, 
+                                            closed_boundary_conditions = False,
+                                            visualization = False,
+                                            as_qutip_qobj = False):
+    """
+    This module constructs the even-coherences weight matrix,
+    M, wherein M_{m, m'} is the weight of the m-m' coherence 
+    term, with both m and m' even numbered-coherences. The odd
+    coherences are disregardes for these do not factor into the 
+    M-matrix. It takes the following as input:
+    ***. a dictionary of parameters
+         **. where, in said dictionary,
+             1. the total number of even coherences to be 
+                considered is explicited,
+             2. the strength of the Sigma-interaction 
+                Hamiltonian, labelled p,
+             3. and the power law factor for its submodules.
+    ***. a mesh for the times, 
+    ***. a boolean option, not implemented as of yet. 
+    ***. a boolean option for visualizing a
+             1. plot of the M-matrix's eigenvalues,
+             2. and the M-matrix coefficients in a Hinton
+                diagram.
+    ***. a boolean option for returning the M-matrix as 
+         quantum object.     
+    
+        ===> Returns a real-valued matrix. 
+    *Note that his module does not return a sparse matrix. 
+    """
+    if type(parameters) == dict:
+        M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
+    if type(parameters) == list:
+        M = parameters[0]; p = parameters[1]; a = parameters[2]
+        
+    m_matrix_list = []; t = timet;
+    normalization = normalization_factor(total_no_cohr = M,
+                                         time = t,
+                                         power_law_factor = a)
+    
+    for m in range(M):
+        if m == 0:
+            local_array = np.array([A_mmplustwo_matrix_elmt(cohrnc = m, time = t, 
+                                                                   power_law_factor = a) + 
+                                           p * C_m_matrix_elmt(cohrnc = m, time = t, 
+                                                                   power_law_factor = a)] 
+                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, 
+                                                                   power_law_factor = a)] 
+                                          + [0 for i in range(M-2)])
+            local_array = local_array/normalization
+            m_matrix_list.append(local_array)
+            local_array = None
+        if (m > 0 and m < M-1):
+            list_with_zeros = [0 for i in range(m-1)]
+            local_array = np.array(list_with_zeros
+                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
+                                          + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a, p = p)] 
+                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, power_law_factor = a)]  
+                                          + [0 for i in range(M - (len(list_with_zeros)+3))])
+            local_array = local_array/normalization
+            m_matrix_list.append(local_array)
+            local_array = None       
+        if (m == M-1):
+            local_array = np.array([0 for i in range(M - 2)] 
+                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
+                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a) + 
+                                               p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)])
+            local_array = local_array/normalization
+            m_matrix_list.append(local_array)
+            local_array = None
+    
+    ### test:
+    dimensions_equal_tot_no_cohr = [len(m_matrix_list) == M for i in range(len(m_matrix_list))]
+    assert (np.all(dimensions_equal_tot_no_cohr and len(m_matrix_list) == M)),"Error: M-matrix is not square"
+        
+    if visualization:
+        eigenvalues_list = linalg.eig(m_matrix_list)[0]
+        plt.scatter([i+1 for i in range(len(eigenvalues_list))], np.array(eigenvalues_list), label = "M-matrix's eigenvalues")
+        plt.matshow(m_matrix_list)
+        
+    if as_qutip_qobj:
+        try: 
+            m_matrix_list = qutip.Qobj(m_matrix_list)
+        except NameError:
+            print(NameError)
+        
+    return m_matrix_list
+
+# In [3]:
 
 def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet, 
                                             closed_boundary_conditions = False,
@@ -147,8 +242,10 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
         M = parameters[0]; p = parameters[1]; a = parameters[2]
         
     m_matrix_list = []; t = timet;
-    
     m_dimensional_zero_array = [0 for m in range(M)]
+    normalization = normalization_factor(total_no_cohr = M,
+                                         time = t,
+                                         power_law_factor = a)
     
     for m in range(M):
         if m == 0:
@@ -159,7 +256,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
                                           + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, 
                                                                    power_law_factor = a)] 
                                           + [0 for i in range(M-2)])
-            local_array = local_array/(sum(local_array))
+            local_array = local_array/normalization
             m_matrix_list.append(local_array)
             local_array = None
         if (m > 0 and m < M-1):
@@ -169,7 +266,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
                                           + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a, p = p)] 
                                           + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, power_law_factor = a)]  
                                           + [0 for i in range(M - (len(list_with_zeros)+3))])
-            local_array = local_array/(sum(local_array))
+            local_array = local_array/normalization
             m_matrix_list.append(local_array)
             local_array = None       
         if (m == M-1):
@@ -177,7 +274,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a) + 
                                                p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)])
-            local_array = local_array/(sum(local_array))
+            local_array = local_array/normalization
             m_matrix_list.append(local_array)
             local_array = None
             
@@ -191,7 +288,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
                                                                    power_law_factor = a)] 
                                           + [0 for i in range(M-2)]
                                 + m_dimensional_zero_array)
-            local_array = local_array/(sum(local_array))
+            local_array = local_array/normalization
             m_matrix_list.append(local_array)
             local_array = None
         if (m > 0 and m < M-1):
@@ -202,7 +299,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
                                           + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, power_law_factor = a)]  
                                           + [0 for i in range(M - (len(list_with_zeros)+3))]
                                 + m_dimensional_zero_array)
-            local_array = local_array/(sum(local_array))
+            local_array = local_array/normalization
             m_matrix_list.append(local_array)
             local_array = None       
         if (m == M-1):
@@ -211,7 +308,7 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
                                           + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a) + 
                                                p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
                                 + m_dimensional_zero_array)
-            local_array = local_array/(sum(local_array))
+            local_array = local_array/normalization
             m_matrix_list.append(local_array)
             local_array = None
     
