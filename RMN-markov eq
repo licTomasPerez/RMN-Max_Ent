@@ -1,0 +1,904 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "9c998351",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import qutip, pickle, sys\n",
+    "import matplotlib.pyplot as plt \n",
+    "import numpy as np\n",
+    "import scipy.optimize as opt \n",
+    "import scipy.linalg as linalg\n",
+    "import time as time\n",
+    "import math, cmath\n",
+    "import Max_Ent_aux_lib as me\n",
+    "#import proj_ev_library as projev\n",
+    "#import max_entev library as meev\n",
+    "from IPython.display import display, Math, Latex\n",
+    "\n",
+    "np.set_printoptions(threshold=1.e-3,linewidth=120,precision=1, formatter={\"float\":lambda x: str(.001*int(1000*x)) })"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6413887b",
+   "metadata": {},
+   "source": [
+    "Tenemos la siguiente ecuación de movimiento:\n",
+    "\n",
+    "$$\n",
+    "    \\dot{c}_M(t) I_{M}^{0}(t) = -i \\bigg\\{\\bigg(c_{M+2}(t) - c_M(t) \\bigg)\\langle \\rho_{M}^{0\\dagger}(t) [H_{0,-2}, \\rho_{M+2}^0] \\rangle + \\bigg(c_{M-2}(t) - c_M(t)\\bigg) \\langle \\rho_{M}^{0\\dagger}(t) [H_{0,2}, \\rho_{M-2}^0] \\rangle + p \\langle \\rho_{M}^{0\\dagger}(t) [\\Sigma, \\rho_{M}^0 (t)]\\rangle \\bigg\\}\n",
+    "$$\n",
+    "\n",
+    "siendo $I_{M}^{0}(t) = \\langle \\rho_{M}^{0\\dagger}(t) \\rho_{M}^{0}(t)\\rangle = I_{-M}^{0}(t)$\n",
+    "la cual puede reescribirse como \n",
+    "\n",
+    "$$\n",
+    "\\dot{c}_M(t) I_{M}^{0}(t) = -i \\bigg\\{A_{\\rho^{M, M+2}} c_{M+2}(t) - \\bigg(A_{\\rho^{M, M+2}} + B_{\\rho^{M, M-2}} \\bigg) c_{M}(t) + B_{\\rho^{M, M-2}} c_{M-2}(t) \\bigg\\} + p C_{\\rho^M} \\\\\n",
+    "= - i({\\bf{\\mathcal{M}}}(t) \\textbf{c}(t))_M\n",
+    "$$\n",
+    "\n",
+    "donde \n",
+    "\n",
+    "<ol>\n",
+    "\n",
+    "<li> $A_{\\rho^{M, M+2}} = \\langle \\rho_{M}^{0\\dagger}(t) [H_{0,-2}, \\rho_{M+2}^0] \\rangle$ </li> \n",
+    "<li> $B_{\\rho^{M, M-2}} = \\langle \\rho_{M}^{0\\dagger}(t) [H_{0,2}, \\rho_{M-2}^0] \\rangle$ </li>\n",
+    "<li> $C_{\\rho^M} = \\langle \\rho_{M}^{0\\dagger}(t) [\\Sigma, \\rho_{M}^0 (t)]\\rangle$ </li>\n",
+    "    \n",
+    "</ol>    \n",
+    "\n",
+    "Entonces, si $f(t) = \\langle \\rho(t) \\rho^0(t) \\rangle = \\sum_{M} {c}_M(t) I_{M}^{0}(t)$\n",
+    "\n",
+    "$$\n",
+    "    \\dot{f}(t) = \\sum_{M} \\bigg(\\dot{c}_M(t) I_{M}^{0}(t) + {c}_M(t) \\dot{I}_{M}^{0}(t) \\bigg)\n",
+    "$$"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9492c01e",
+   "metadata": {},
+   "source": [
+    "where\n",
+    "\n",
+    "1: $A=\\alpha B = N(t) \\exp(-m t^{1+a}) = I_M^{(0)}$ (a primer orden alpha = 1) \\\n",
+    "2: $C = M N(t) exp(-m t^{1+a})$\n",
+    "\n",
+    "con $N(t) = 1/Tr(\\rho(t))$ la calculo con la definición del $\\rho_M (t)=  c_{M}(t) \\rho^0_M(t)$, with $c_0(t)$= 1. \n",
+    "Note that the kernel $K(t,t') = e^{(-i M(t-t'))}$ is not a solution to the previous differential equation for the M-tensor is time-dependent\n",
+    "    \n",
+    "$H_ {0, 2}^\\dagger = H_{0, -2}$ \n",
+    "\n",
+    "$\\rho_{M}^\\dagger = \\rho_{-M}$"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "a641b494",
+   "metadata": {},
+   "source": [
+    "## Step 1: Fix parameters and initial conditions for the coherences"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "id": "ea71fc99",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "p = .108;    # strength of the Sigma Interaction Hamiltonian\n",
+    "a = -1;      # Power-law factor\n",
+    "M = 300;        # Truncation/Total no. of coherences\n",
+    "coherences_t0_pert0 = 1. # Unused for the time being\n",
+    "param_list = {\"total_no_cohrs\": M, \"p_factor\": p, \"power_law_factor\": a} # dictionary containing the simulation's initial \n",
+    "                                                                         # parameters \n",
+    "#cohr_t0_trace = sum(cohr_complex_t0)\n",
+    "#cohr_complex_t0 = [cohr/cohr_t0_trace for cohr in cohr_complex_t0]\n",
+    "#cohr_complex_t0 = np.array(cohr_complex_t0)\n",
+    "cohr_complex_t0 = [1 for i in range(param_list[\"total_no_cohrs\"])] \n",
+    "    # initial configuration of complex-valued coherences, random numbers for the time being. Can be changed in the future\n",
+    "\n",
+    "cohr_complex_t0 += [0 for i in range(param_list[\"total_no_cohrs\"])]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "10e67289",
+   "metadata": {},
+   "source": [
+    "Since the coherences are complex-valued numbers, the previous system of $M \\times M$ coupled complex-valued differential equations can be rewritten as a system of $2M \\times 2M$ coupled real-valued differential equations, as follows:\n",
+    "\n",
+    "if $c_M(t) = a_M(t) + i b_M(t)$, then \n",
+    "\n",
+    "$$\n",
+    "    \\dot{a}_M(t) + i \\dot{b}_M(t) = -i \\sum_{m'}{\\bf{\\mathcal{M}}}_{Mm'}(t) \\bigg(a_{m'}(t) + i b_{m'}(t)\\bigg),\n",
+    "$$\n",
+    "\n",
+    "$$\n",
+    "    \\dot{a}_M(t) + i \\dot{b}_M(t) = -i \\sum_{m'}{\\bf{\\mathcal{M}}}_{Mm'}(t) a_{m'}(t) + \\sum_{m'} {\\bf{\\mathcal{M}}}_{Mm'}(t) b_{m'}(t)\n",
+    "$$\n",
+    "\n",
+    "$$\n",
+    "    \\dot{{\\bf a}}(t) = {\\cal M}(t) \\cdot {\\bf b}(t), \\quad \\dot{{\\bf b}}(t) = -{\\cal M}(t) \\cdot {\\bf a}(t), \\qquad s.t. \\quad{\\bf c}(t) = {\\bf a}(t) + i {\\bf b}(t)\n",
+    "$$\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "afc249cc",
+   "metadata": {},
+   "source": [
+    "## Step 2: Setting up and Solving system of complex diff. eqs"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 29,
+   "id": "89f9074c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "param_list = {\"total_no_cohrs\": M, \"p_factor\": p, \"power_law_factor\": a} # dictionary containing the simulation's initial \n",
+    "                                                                         # parameters \n",
+    "\n",
+    "cohr_complex_t0 = [1 for i in range(param_list[\"total_no_cohrs\"])]\n",
+    "cohr_complex_t0 += [0 for i in range(param_list[\"total_no_cohrs\"])]\n",
+    "cohr_complex_t0 = np.array(cohr_complex_t0)\n",
+    "param_list = [M, p, a]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 39,
+   "id": "ec08f283",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "600"
+      ]
+     },
+     "execution_count": 39,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "B = me.complex_differential_system(parameters = param_list, cohr_complex = cohr_complex_t0, t=1)\n",
+    "len(B)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 40,
+   "id": "e548e3b9",
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/latex": [
+       "Quantum object: dims = [[600], [600]], shape = (600, 600), type = oper, isherm = True\\begin{equation*}\\left(\\begin{array}{*{11}c}0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\\\vdots & \\vdots & \\vdots & \\vdots & \\vdots & \\ddots & \\vdots & \\vdots & \\vdots & \\vdots & \\vdots\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\\\end{array}\\right)\\end{equation*}"
+      ],
+      "text/plain": [
+       "Quantum object: dims = [[600], [600]], shape = (600, 600), type = oper, isherm = True\n",
+       "Qobj data =\n",
+       "[[0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " ...\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]]"
+      ]
+     },
+     "execution_count": 40,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "Mmatrix = me.Mtensor_2mx2m_dimensional_symplectic(parameters = param_list, \n",
+    "                                                  init_configurations = cohr_complex_t0, \n",
+    "                                                  timet=3, as_qutip_qobj = False)\n",
+    "qutip.Qobj(Mmatrix)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 41,
+   "id": "d892100f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "assert linalg.norm(Mmatrix)>1e-5, \"Error: The Mmatrix is null\"\n",
+    "assert linalg.norm(qutip.Qobj(Mmatrix) - qutip.Qobj(Mmatrix).dag())<1e-5, \"Error: The Mmatrix is not hermitian\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 42,
+   "id": "8c11b39c",
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/latex": [
+       "Quantum object: dims = [[600], [600]], shape = (600, 600), type = oper, isherm = True\\begin{equation*}\\left(\\begin{array}{*{11}c}0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\\\vdots & \\vdots & \\vdots & \\vdots & \\vdots & \\ddots & \\vdots & \\vdots & \\vdots & \\vdots & \\vdots\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\0.0 & 0.0 & 0.0 & 0.0 & 0.0 & \\cdots & 0.0 & 0.0 & 0.0 & 0.0 & 0.0\\\\\\end{array}\\right)\\end{equation*}"
+      ],
+      "text/plain": [
+       "Quantum object: dims = [[600], [600]], shape = (600, 600), type = oper, isherm = True\n",
+       "Qobj data =\n",
+       "[[0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " ...\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]\n",
+       " [0.0 0.0 0.0 ... 0.0 0.0 0.0]]"
+      ]
+     },
+     "execution_count": 42,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    ".5 * (qutip.Qobj(Mmatrix) + qutip.Qobj(Mmatrix).dag())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 43,
+   "id": "175af323",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Help on function complex_differential_system in module Max_Ent_aux_lib:\n",
+      "\n",
+      "complex_differential_system(cohr_complex, t, parameters)\n",
+      "\n"
+     ]
+    }
+   ],
+   "source": [
+    "help(me.complex_differential_system)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 44,
+   "id": "cc8bd1fc",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([0.0, 0.0, 0.0, ..., 0.0, 0.0, 0.0])"
+      ]
+     },
+     "execution_count": 44,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "me.complex_differential_system(cohr_complex = cohr_complex_t0, t = 1e-5, parameters = param_list)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 45,
+   "id": "e93ae0cc",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([0.0, 0.0, 0.0, ..., 0.0, 0.0, 0.0])"
+      ]
+     },
+     "execution_count": 45,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "me.complex_differential_system(cohr_complex = cohr_complex_t0, t = .5, parameters = param_list)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 58,
+   "id": "1bf86fb7",
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([[1.0, 1.0, 1.0, ..., 0.0, 0.0, 0.0],\n",
+       "       [1.0, 1.0, 1.0, ..., 0.0, 0.0, 0.0],\n",
+       "       [1.0030000000000001, 1.002, 1.0, ..., 0.0, 0.0, 0.0],\n",
+       "       ...,\n",
+       "       [28.519000000000002, 14.414, 1.824, ..., 0.0, 0.0, 0.0],\n",
+       "       [29.691, 14.961, 1.863, ..., 0.0, 0.0, 0.0],\n",
+       "       [30.911, 15.530000000000001, 1.905, ..., 0.0, 0.0, 0.0]])"
+      ]
+     },
+     "execution_count": 58,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "from scipy.integrate import odeint\n",
+    "tmax = 5; no_steps = 100\n",
+    "ts = np.linspace(0, tmax, no_steps)                ## times \n",
+    "time_ev_ReIm_cohrs = odeint(func = me.complex_differential_system, \n",
+    "                y0 = cohr_complex_t0, \n",
+    "                t = ts,\n",
+    "                args = ((param_list,)))\n",
+    "#  tiempo vertical, primera linea es la config init: t  cohr\n",
+    "# cohr[t][m] = coherencia a tiempo t número m\n",
+    "time_ev_ReIm_cohrs "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 59,
+   "id": "f54f6800",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Revisar la hermiticidad de la matriz. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 60,
+   "id": "70c4d158",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "### Test\n",
+    "assert len(time_ev_ReIm_cohrs) == no_steps\n",
+    "assert len(time_ev_ReIm_cohrs[1]) == 2*M"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "62cb6ca9",
+   "metadata": {},
+   "source": [
+    "## Step 3: Obtaining the time-evolved complex-valued coherences\n",
+    "\n",
+    "\n",
+    "Ideally, the observables of interest obtained via our coherences should show this trend \n",
+    "\n",
+    "<img src=\"PhD%20Physics/2nd%20Year/RMN-Max-Ent/Decoherence_..._scrambling_Dominguez_ib_observables\" width=60 height=60 />"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 61,
+   "id": "6fe44425",
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [],
+   "source": [
+    "complex_cohrs_at_time_t = [[time_ev_ReIm_cohrs[list(ts).index(t)][m] + 1j*time_ev_ReIm_cohrs[list(ts).index(t)][m+M] for m in range(M)] for t in ts]\n",
+    "complex_cohrs_at_time_t = np.array(complex_cohrs_at_time_t)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 62,
+   "id": "4354cfdd",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([1.+0.j, 1.+0.j, 1.+0.j, ..., 1.+0.j, 1.+0.j, 1.+0.j])"
+      ]
+     },
+     "execution_count": 62,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "complex_cohrs_at_time_t[0]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 63,
+   "id": "2dc7c2f2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#fidelity_at_time_t = [sum(complex_cohrs_at_time_t[list(ts).index(t)] * A_mmplustwo_matrix_elmt(cohrnc, time, power_law_factor = .5)\n",
+    "#   \n",
+    "#    list(ts).index(t)]) for t in ts]"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "949c24ab",
+   "metadata": {},
+   "source": [
+    "Entonces, si\n",
+    "\n",
+    "$$\n",
+    "    f(t) = \\langle \\rho(t) \\rho^0(t) \\rangle = \\sum_{M}{c}_M(t) I_{M}^{0}(t)\n",
+    "$$\n",
+    "\n",
+    "then\n",
+    "\n",
+    "$$\n",
+    "    \\dot{f}(t) = \\sum_{M} \\bigg(\\dot{c}_M(t) I_{M}^{0}(t) + {c}_M(t) \\dot{I}_{M}^{0}(t) \\bigg)\n",
+    "$$"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 64,
+   "id": "935fee33",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "#complex_cohrs_at_time_t[99][599]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 65,
+   "id": "6e759e83",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fidelity_at_timet = []\n",
+    "timespan = list(ts)\n",
+    "#normalization_factor = sum(me.A_mmplustwo_matrix_elmt(cohrnc = m, time = 0, power_law_factor = a) for m in range(M))\n",
+    "normalization = sum(np.e**(-m) for m in range(M))\n",
+    "\n",
+    "for t in ts:\n",
+    "    local_list = complex_cohrs_at_time_t[timespan.index(t)]\n",
+    "    local_val = sum(local_list[m] * me.A_mmplustwo_matrix_elmt(cohrnc = m, \n",
+    "                                                               time = t, \n",
+    "                                                               power_law_factor = a)\n",
+    "                   for m in range(M))    \n",
+    "    local_val = local_val/normalization\n",
+    "    fidelity_at_timet.append(local_val)\n",
+    "    local_val = 0\n",
+    "    \n",
+    "assert len(fidelity_at_timet) == len(ts)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 66,
+   "id": "3bcfb89c",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "100"
+      ]
+     },
+     "execution_count": 66,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "len(ts)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 67,
+   "id": "3af5a566",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<matplotlib.collections.PathCollection at 0x1d580423400>"
+      ]
+     },
+     "execution_count": 67,
+     "metadata": {},
+     "output_type": "execute_result"
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "plt.scatter(ts, np.real(fidelity_at_timet))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "63a79c31",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "07d78449",
+   "metadata": {},
+   "source": [
+    "# Tests y fallos :("
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "be177967",
+   "metadata": {},
+   "source": [
+    "## Test: $a$ = -1"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 79,
+   "id": "6eecd25e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "p = .108;    # strength of the Sigma Interaction Hamiltonian\n",
+    "a = -1;      # Power-law factor\n",
+    "M = 300;        # Truncation/Total no. of coherences\n",
+    "coherences_t0_pert0 = 1. # Unused for the time being\n",
+    "param_list = {\"total_no_cohrs\": M, \"p_factor\": p, \"power_law_factor\": a} # dictionary containing the simulation's initial \n",
+    "                                                                         # parameters \n",
+    "\n",
+    "c0 = [1 for i in range(param_list[\"total_no_cohrs\"])]\n",
+    "param_list = [M, p, -1]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 80,
+   "id": "c7279cc6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "Mmatrix = me.gen_func_even_cohr_M_matrix(parameters = param_list, init_configurations = cohr_complex_to, timet = 0)\n",
+    "Mmatrix_timet = me.gen_func_even_cohr_M_matrix(parameters = param_list, init_configurations = cohr_complex_to, timet = 10)\n",
+    "\n",
+    "Mmatrix = np.array(Mmatrix)\n",
+    "assert linalg.norm(qutip.Qobj(Mmatrix) - qutip.Qobj(Mmatrix_timet))<1e-5, \"Error: Mmatrix is time-dependent\"\n",
+    "assert linalg.norm(qutip.Qobj(Mmatrix) - qutip.Qobj(Mmatrix).dag())>1e-5, \"Error: Mmatrix is not hermitian\"\n",
+    "assert np.all(np.imag(qutip.Qobj(Mmatrix).eigenenergies())<1e-10), \"Error: Eigenvalues of Mmatrix are not real\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 81,
+   "id": "5c7e6948",
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [],
+   "source": [
+    "Mmatrix = .5 * (Mmatrix + np.transpose(Mmatrix))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 82,
+   "id": "5caba81a",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array([[0.632, 0.432, 0.0, ..., 0.0, 0.0, 0.0],\n",
+       "       [0.432, -0.439, 0.159, ..., 0.0, 0.0, 0.0],\n",
+       "       [0.0, 0.159, -0.152, ..., 0.0, 0.0, 0.0],\n",
+       "       ...,\n",
+       "       [0.0, 0.0, 0.0, ..., 0.0, 0.0, 0.0],\n",
+       "       [0.0, 0.0, 0.0, ..., 0.0, 0.0, 0.0],\n",
+       "       [0.0, 0.0, 0.0, ..., 0.0, 0.0, 0.0]])"
+      ]
+     },
+     "execution_count": 82,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "Mmatrix"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 83,
+   "id": "d01d3596",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "tmax = 10; no_steps = 100\n",
+    "ts = np.linspace(0, tmax, no_steps)       "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 84,
+   "id": "1d35bde5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "coherences_at_timet = [linalg.expm(1j * Mmatrix * t) @ c0 for t in ts]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 87,
+   "id": "eda2f650",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fidelity_at_timet = []\n",
+    "timespan = list(ts)\n",
+    "#normalization_factor = sum(me.A_mmplustwo_matrix_elmt(cohrnc = m, time = 0, power_law_factor = a) for m in range(M))\n",
+    "#normalization = sum(np.e**(-m) for m in range(M))\n",
+    "\n",
+    "for t in ts:\n",
+    "    local_list = coherences_at_timet[timespan.index(t)]\n",
+    "    local_val = sum(local_list[m] * me.A_mmplustwo_matrix_elmt(cohrnc = m, \n",
+    "                                                               time = t, \n",
+    "                                                               power_law_factor = a)\n",
+    "                   for m in range(M))    \n",
+    "    local_val = local_val/normalization\n",
+    "    fidelity_at_timet.append(local_val)\n",
+    "    local_val = 0"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 91,
+   "id": "671bf17c",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "C:\\Users\\tomas\\anaconda3\\lib\\site-packages\\matplotlib\\collections.py:200: ComplexWarning: Casting complex values to real discards the imaginary part\n",
+      "  offsets = np.asanyarray(offsets, float)\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "<matplotlib.collections.PathCollection at 0x1d58085a2e0>"
+      ]
+     },
+     "execution_count": 91,
+     "metadata": {},
+     "output_type": "execute_result"
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "plt.scatter(ts, (fidelity_at_timet))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 26,
+   "id": "08a247d4",
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "<matplotlib.collections.PathCollection at 0x1d1a2443c10>"
+      ]
+     },
+     "execution_count": 26,
+     "metadata": {},
+     "output_type": "execute_result"
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "plt.scatter(ts, np.real(fidelity_at_timet))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "id": "ea236aa0",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "(1.577442920454217+0.11407549081033179j)"
+      ]
+     },
+     "execution_count": 21,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 72,
+   "id": "ec4d586e",
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "100"
+      ]
+     },
+     "execution_count": 72,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "len(result[:, 0])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "15848b77",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fidelity_t0 = []"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 23,
+   "id": "781be6e4",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "ename": "SyntaxError",
+     "evalue": "invalid syntax (3991330021.py, line 1)",
+     "output_type": "error",
+     "traceback": [
+      "\u001b[1;36m  Input \u001b[1;32mIn [23]\u001b[1;36m\u001b[0m\n\u001b[1;33m    Preguntas:\u001b[0m\n\u001b[1;37m              ^\u001b[0m\n\u001b[1;31mSyntaxError\u001b[0m\u001b[1;31m:\u001b[0m invalid syntax\n"
+     ]
+    }
+   ],
+   "source": [
+    "Preguntas:\n",
+    "    \n",
+    "    1. La matrix M tiene que depender con el tiempo me parece, si A, B y C lo hacen: Check \n",
+    "    2. Como tendría que implementar la norma???: Check\n",
+    "    3. Empezar a jugar con los parámetros: Checkn't\n",
+    "    \n",
+    "m+2 vs m+2 : Check\n",
+    "** reescribir la matriz en tèrminos de los c_pares. : Check"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 73,
+   "id": "067ec940",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "6"
+      ]
+     },
+     "execution_count": 73,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "len(result[0])"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.12"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
