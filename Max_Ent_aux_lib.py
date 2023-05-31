@@ -260,7 +260,7 @@ def antidiagonal_2M2M_block_Mmatrix(parameters, time, closed_boundary_conditions
         m_matrix_list = qutip.Qobj(m_matrix_list)
     
     m_matrix_list = np.asarray(m_matrix_list)
-    print("Non-symmetric-ness of Mmatrix: ", linalg.norm(m_matrix_list -  np.transpose(m_matrix_list)))
+   # print("Non-symmetric-ness of Mmatrix: ", linalg.norm(m_matrix_list -  np.transpose(m_matrix_list)))
     
     if return_symmetric_Mmatrix:
         m_matrix_list = .5*(m_matrix_list + np.transpose(m_matrix_list)) 
@@ -297,7 +297,6 @@ def complex_differential_system(coherences_init_configs, time, parameters):
                      previous equation written in this module's documentation. 
     
     """
-    Mtensor = antidiagonal_2M2M_block_Mmatrix(parameters = parameters, init_configurations = coherences_init_configs, 
-                                                   time = time)
+    Mtensor = antidiagonal_2M2M_block_Mmatrix(parameters = parameters, time = time)
     Mtensor_loc = np.asarray(Mtensor)
     return Mtensor_loc @ coherences_init_configs
