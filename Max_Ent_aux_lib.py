@@ -9,7 +9,7 @@ import math, cmath
 
 # In [1]:
 
-def A_mmplustwo_matrix_elmt(cohrnc, time, power_law_factor = .5):
+def power_law_weight(coherence, time, power_law_factor = -1):
     """
     This module construct the weight of the m-th
     coherence's interaction with the forward next-nearest-
@@ -31,57 +31,9 @@ def A_mmplustwo_matrix_elmt(cohrnc, time, power_law_factor = .5):
      ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
          
     """
-    return np.e**(-cohrnc * time**(1+power_law_factor))
+    return np.e**(-coherence * time**(1+power_law_factor))
 
-def B_mmminustwo_matrix_elmt(cohrnc, time, power_law_factor):
-    """
-    This module construct the weight of the m-th
-    coherence's interaction with the previous next-nearest-
-    neighbour (NNN) coherence, ie. the (m-2)-th coherence, 
-    according to the unperturbed Hamiltonian H0. 
-        It takes the followings parameters as inputs:
-    
-        ***. 1. cohrnc: the m-th coherence,
-        ***. 2. time: time
-        ***. 3. power_law_factor: a real valued number, 
-                                  between 0 and 1, 
-                                  which characterizes 
-                                  our approximation 
-                                  for the coherence's
-                                  time evolution as 
-                                  the exponential of 
-                                  a power law of time. 
-    
-     ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
-         
-    """
-    return np.e**(-cohrnc * time**(1+power_law_factor))
-
-def C_m_matrix_elmt(cohrnc, time, power_law_factor):
-    """
-    This module construct the diagonal interactions corresponding
-    to the m-th's coherence <<self-interaction>>,
-    associated with the perturbation Hamiltonian Sigma. 
-        It takes the followings parameters as inputs:
-    
-        ***. 1. cohrnc: the m-th coherence,
-        ***. 2. time: time
-        ***. 3. power_law_factor: a real valued number, 
-                                  between 0 and 1, 
-                                  which characterizes 
-                                  our approximation 
-                                  for the coherence's
-                                  time evolution as 
-                                  the exponential of 
-                                  a power law of time. 
-    
-     ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
-    
-    It returns a real number. 
-    """
-    return cohrnc * np.e**(-cohrnc * time**(1+power_law_factor))
-
-def diag_mm_matrix_elmt(cohrnc, time, power_law_factor, p):
+def diagonal_matrix_element(coherence, time, power_law_factor = -1, interaction_strength = 0):
     """
     This module constructs the effective self-interaction for 
     the m-th coherence, due to both the unperturbed and the
@@ -101,85 +53,78 @@ def diag_mm_matrix_elmt(cohrnc, time, power_law_factor, p):
     
      ===> It returns a real number: 
     """
-    return (-A_mmplustwo_matrix_elmt(cohrnc, time, power_law_factor)
-            - B_mmminustwo_matrix_elmt(cohrnc, time, power_law_factor) 
-            + p * C_m_matrix_elmt(cohrnc, time, power_law_factor))
+    return (
+            -power_law_weight(coherence, time, power_law_factor)
+            - power_law_weight(coherence, time, power_law_factor)
+            + interaction_strength * coherence * power_law_weight(coherence, time, power_law_factor)
+           )
 
-def normalization_factor(total_no_cohr, time, power_law_factor):
+def normalization_factor(total_number_coherences, time, power_law_factor):
     """
-    This module returs a normalization for the coherences
+    This module returs a time-dependent normalization factor for the weights of the coherences.
     """
-    return sum(np.e**(-m*time**(1+power_law_factor)) for m in range(total_no_cohr))
-
+    return sum(power_law_weight(coherence = m, time = time, power_law_factor = power_law_factor) for m in range(total_number_coherences)) 
+    
 # In [2]:
 
-def gen_func_even_cohr_M_matrix(parameters, init_configurations, timet, 
-                                            closed_boundary_conditions = False,
-                                            visualization = False,
-                                            as_qutip_qobj = False):
+def generating_fnc_even_coherences_Mmatrix(parameters, time, closed_boundary_conditions = False,
+                                                       visualization = False,
+                                                       qutip_qobj_result = False):
     """
-    This module constructs the even-coherences weight matrix,
-    M, wherein M_{m, m'} is the weight of the m-m' coherence 
-    term, with both m and m' even numbered-coherences. The odd
-    coherences are disregardes for these do not factor into the 
-    M-matrix. It takes the following as input:
+    This module constructs the even-coherences weight matrix, M, wherein M_{m, m'} is the weight of the m-m' coherence 
+    term, with both m and m' even numbered-coherences. The odd coherences are disregarded for these do not factor into the M-matrix
+    and are not coupled to the even coherences.
+    This modules takes the following inputs: 
     ***. a dictionary of parameters
          **. where, in said dictionary,
-             1. the total number of even coherences to be 
-                considered is explicited,
-             2. the strength of the Sigma-interaction 
-                Hamiltonian, labelled p,
+             1. the total number of even coherences to be considered is given,
+             2. the strength of the Sigma-interaction Hamiltonian, labelled p,
              3. and the power law factor for its submodules.
     ***. a mesh for the times, 
     ***. a boolean option, not implemented as of yet. 
     ***. a boolean option for visualizing a
              1. plot of the M-matrix's eigenvalues,
-             2. and the M-matrix coefficients in a Hinton
-                diagram.
-    ***. a boolean option for returning the M-matrix as 
-         quantum object.     
+             2. and the M-matrix coefficients in a Hinton diagram.
+    ***. a boolean option for returning the M-matrix as quantum object.     
     
         ===> Returns a real-valued matrix. 
     *Note that his module does not return a sparse matrix. 
     """
+
     if type(parameters) == dict:
         M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
     if type(parameters) == list:
         M = parameters[0]; p = parameters[1]; a = parameters[2]
         
-    m_matrix_list = []; t = timet;
-    normalization = normalization_factor(total_no_cohr = M,
-                                         time = t,
-                                         power_law_factor = a)
+    m_matrix_list = []; t = time;
+    tmd_normalization_factor = normalization_factor(total_number_coherences = M, time = t, power_law_factor = a)
     
     for m in range(M):
         if m == 0:
-            local_array = np.array([A_mmplustwo_matrix_elmt(cohrnc = m, time = t, 
-                                                                   power_law_factor = a) + 
-                                           p * C_m_matrix_elmt(cohrnc = m, time = t, 
-                                                                   power_law_factor = a)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, 
-                                                                   power_law_factor = a)] 
-                                          + [0 for i in range(M-2)])
-            local_array = local_array/normalization
+            local_array = np.array([power_law_weight(coherence = m, time = t, power_law_factor = a)  
+                                          + p * m * power_law_weight(coherence = m, time = t, power_law_factor = a)] 
+                                    + [power_law_weight(coherence = m+2, time = t, power_law_factor = a)] 
+                                    + [0 for i in range(M-2)])
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None
         if (m > 0 and m < M-1):
             list_with_zeros = [0 for i in range(m-1)]
             local_array = np.array(list_with_zeros
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
-                                          + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a, p = p)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, power_law_factor = a)]  
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a)]
+                                          + [diagonal_matrix_element(coherence = m, time = t, power_law_factor = a, 
+                                                                     interaction_strength = p)] 
+                                          + [power_law_weight(coherence = m+2-2, time = t, power_law_factor = a)]  
                                           + [0 for i in range(M - (len(list_with_zeros)+3))])
-            local_array = local_array/normalization
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None       
         if (m == M-1):
             local_array = np.array([0 for i in range(M - 2)] 
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a) + 
-                                               p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)])
-            local_array = local_array/normalization
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a)] 
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a)  
+                                              + p * m * power_law_weight(coherence = m, time = t, power_law_factor = a)])
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None
     
@@ -192,7 +137,7 @@ def gen_func_even_cohr_M_matrix(parameters, init_configurations, timet,
         plt.scatter([i+1 for i in range(len(eigenvalues_list))], np.array(eigenvalues_list), label = "M-matrix's eigenvalues")
         plt.matshow(m_matrix_list)
         
-    if as_qutip_qobj:
+    if qutip_qobj_result:
         try: 
             m_matrix_list = qutip.Qobj(m_matrix_list)
         except NameError:
@@ -202,10 +147,10 @@ def gen_func_even_cohr_M_matrix(parameters, init_configurations, timet,
 
 # In [3]:
 
-def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet, 
-                                            closed_boundary_conditions = False,
-                                            visualization = False,
-                                            as_qutip_qobj = False):
+def antidiagonal_2M2M_block_Mmatrix(parameters, time, closed_boundary_conditions = False,
+                                                       visualization = False,
+                                                       qutip_qobj_result = False,
+                                                       return_symmetric_Mmatrix = False):
     """
     This module constructs the skew-symmetric (2M by 2M)-dimensional M-matrix,
     in terms of which the system of (2M by 2M) quasi-coupled real-valued differential equations is written.
@@ -236,102 +181,94 @@ def Mtensor_2mx2m_dimensional_symplectic(parameters, init_configurations, timet,
     Warnings: Only real values allowed for the parameters. 
      
     """
+    
     if type(parameters) == dict:
         M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
     if type(parameters) == list:
         M = parameters[0]; p = parameters[1]; a = parameters[2]
         
-    m_matrix_list = []; t = timet;
+    m_matrix_list = []; t = time;
     m_dimensional_zero_array = [0 for m in range(M)]
-    normalization = normalization_factor(total_no_cohr = M,
-                                         time = t,
-                                         power_law_factor = a)
+    tmd_normalization_factor = normalization_factor(total_number_coherences = M, time = t, power_law_factor = a)
     
     for m in range(M):
         if m == 0:
-            local_array = np.array(m_dimensional_zero_array + [A_mmplustwo_matrix_elmt(cohrnc = m, time = t, 
-                                                                   power_law_factor = a) + 
-                                           p * C_m_matrix_elmt(cohrnc = m, time = t, 
-                                                                   power_law_factor = a)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, 
-                                                                   power_law_factor = a)] 
-                                          + [0 for i in range(M-2)])
-            local_array = local_array/normalization
+            local_array = np.array(m_dimensional_zero_array 
+                                   + [power_law_weight(coherence = m, time = t, power_law_factor = a)
+                                      + p * m * power_law_weight(coherence = m, time = t, power_law_factor = a)] 
+                                   + [power_law_weight(coherence = m+2-2, time = t, power_law_factor = a)] 
+                                   + [0 for i in range(M-2)])
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None
         if (m > 0 and m < M-1):
             list_with_zeros = [0 for i in range(m-1)]
             local_array = np.array(m_dimensional_zero_array + list_with_zeros
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
-                                          + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a, p = p)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, power_law_factor = a)]  
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a)]
+                                          + [diagonal_matrix_element(coherence = m, time = t, power_law_factor = a, 
+                                                                     interaction_strength = p)] 
+                                          + [power_law_weight(coherence = m+2-2, time = t, power_law_factor = a)]  
                                           + [0 for i in range(M - (len(list_with_zeros)+3))])
-            local_array = local_array/normalization
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None       
         if (m == M-1):
             local_array = np.array(m_dimensional_zero_array + [0 for i in range(M - 2)] 
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a) + 
-                                               p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)])
-            local_array = local_array/normalization
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a)] 
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a) + 
+                                               p * m * power_law_weight(coherence = m, time = t, power_law_factor = a)])
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None
             
     for m in range(M):
         if m == 0:
-            local_array = np.array([A_mmplustwo_matrix_elmt(cohrnc = m, time = t, 
-                                                                   power_law_factor = a) + 
-                                           p * C_m_matrix_elmt(cohrnc = m, time = t, 
-                                                                   power_law_factor = a)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, 
-                                                                   power_law_factor = a)] 
-                                          + [0 for i in range(M-2)]
+            local_array = np.array([power_law_weight(coherence = m, time = t, power_law_factor = a)  
+                                          + p * m * power_law_weight(coherence = m, time = t, power_law_factor = a)] 
+                                    + [power_law_weight(coherence = m+2-2, time = t, power_law_factor = a)] 
+                                    + [0 for i in range(M-2)]
                                 + m_dimensional_zero_array)
-            local_array = local_array/normalization
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None
         if (m > 0 and m < M-1):
             list_with_zeros = [0 for i in range(m-1)]
             local_array = np.array(list_with_zeros
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
-                                          + [diag_mm_matrix_elmt(cohrnc = m, time = t, power_law_factor = a, p = p)] 
-                                          + [A_mmplustwo_matrix_elmt(cohrnc = m+2-2, time = t, power_law_factor = a)]  
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a)]
+                                          + [diagonal_matrix_element(coherence = m, time = t, power_law_factor = a, 
+                                                                     interaction_strength = p)] 
+                                          + [power_law_weight(coherence = m+2-2, time = t, power_law_factor = a)]  
                                           + [0 for i in range(M - (len(list_with_zeros)+3))]
                                 + m_dimensional_zero_array)
-            local_array = local_array/normalization
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None       
         if (m == M-1):
             local_array = np.array([0 for i in range(M - 2)] 
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)] 
-                                          + [B_mmminustwo_matrix_elmt(cohrnc = m, time = t, power_law_factor = a) + 
-                                               p * C_m_matrix_elmt(cohrnc = m, time = t, power_law_factor = a)]
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a)] 
+                                          + [power_law_weight(coherence = m, time = t, power_law_factor = a) + 
+                                               p * m * power_law_weight(coherence = m, time = t, power_law_factor = a)]
                                 + m_dimensional_zero_array)
-            local_array = local_array/normalization
+            local_array = local_array/tmd_normalization_factor
             m_matrix_list.append(local_array)
             local_array = None
     
     if visualization and M <= 20:
         qutip.Hinton(qutip.Qobj(m_matrix_list))
     
-    if as_qutip_qobj:
+    if qutip_qobj_result:
         m_matrix_list = qutip.Qobj(m_matrix_list)
-    else: 
-        pass
     
     m_matrix_list = np.asarray(m_matrix_list)
-    m_matrix_list = .5*(m_matrix_list + np.transpose(m_matrix_list)) 
+    print("Non-symmetric-ness of Mmatrix: ", linalg.norm(m_matrix_list -  np.transpose(m_matrix_list)))
+    
+    if return_symmetric_Mmatrix:
+        m_matrix_list = .5*(m_matrix_list + np.transpose(m_matrix_list)) 
     return m_matrix_list
 
 # In [3]:
 
-def complex_differential_system(cohr_complex, t, parameters):
-    Mtensor = Mtensor_2mx2m_dimensional_symplectic(parameters = parameters, init_configurations = cohr_complex, 
-                                                   timet = t)
-    
-    Mtensor_loc = np.asarray(Mtensor)
-    Mtensor_loc = .5*(Mtensor + np.transpose(Mtensor)) 
+def complex_differential_system(coherences_init_configs, time, parameters):
     """
     This module sets up the system of (2M by 2M) real-valued coupled differential equations:
     M = [ 0^{M},  M^{1}
@@ -360,4 +297,7 @@ def complex_differential_system(cohr_complex, t, parameters):
                      previous equation written in this module's documentation. 
     
     """
-    return Mtensor_loc @ cohr_complex
+    Mtensor = antidiagonal_2M2M_block_Mmatrix(parameters = parameters, init_configurations = coherences_init_configs, 
+                                                   time = time)
+    Mtensor_loc = np.asarray(Mtensor)
+    return Mtensor_loc @ coherences_init_configs
