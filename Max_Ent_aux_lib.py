@@ -31,7 +31,7 @@ def power_law_weight(coherence, time, power_law_factor = -1):
      ===> It returns a real number: e**(cohrnc * time**(-power_law_factor))
          
     """
-    return np.e**(-coherence * time**(1+power_law_factor))
+    return np.e**(-coherence ** 2 * time**(1+power_law_factor))
 
 def diagonal_matrix_element(coherence, time, power_law_factor = -1, interaction_strength = 0):
     """
@@ -67,7 +67,7 @@ def normalization_factor(total_number_coherences, time, power_law_factor):
     
 # In [2]:
 
-def generating_fnc_even_coherences_Mmatrix(parameters, time, closed_boundary_conditions = False,
+def generating_fnc_even_coherences_Mmatrix(M, p, a, time, closed_boundary_conditions = False,
                                                        visualization = False,
                                                        qutip_qobj_result = False):
     """
@@ -91,11 +91,7 @@ def generating_fnc_even_coherences_Mmatrix(parameters, time, closed_boundary_con
     *Note that his module does not return a sparse matrix. 
     """
 
-    if type(parameters) == dict:
-        M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
-    if type(parameters) == list:
-        M = parameters[0]; p = parameters[1]; a = parameters[2]
-        
+    M = int(M)
     m_matrix_list = []; t = time;
     tmd_normalization_factor = normalization_factor(total_number_coherences = M, time = t, power_law_factor = a)
     
@@ -147,7 +143,7 @@ def generating_fnc_even_coherences_Mmatrix(parameters, time, closed_boundary_con
 
 # In [3]:
 
-def antidiagonal_2M2M_block_Mmatrix(parameters, time, closed_boundary_conditions = False,
+def antidiagonal_2M2M_block_Mmatrix(M, p, a, time, closed_boundary_conditions = False,
                                                        visualization = False,
                                                        qutip_qobj_result = False,
                                                        return_symmetric_Mmatrix = False):
@@ -181,12 +177,7 @@ def antidiagonal_2M2M_block_Mmatrix(parameters, time, closed_boundary_conditions
     Warnings: Only real values allowed for the parameters. 
      
     """
-    
-    if type(parameters) == dict:
-        M = parameters["total_no_cohrs"]; p = parameters["p_factor"]; a = parameters["power_law_factor"]
-    if type(parameters) == list:
-        M = parameters[0]; p = parameters[1]; a = parameters[2]
-        
+    M = int(M)
     m_matrix_list = []; t = time;
     m_dimensional_zero_array = [0 for m in range(M)]
     tmd_normalization_factor = normalization_factor(total_number_coherences = M, time = t, power_law_factor = a)
@@ -268,7 +259,7 @@ def antidiagonal_2M2M_block_Mmatrix(parameters, time, closed_boundary_conditions
 
 # In [3]:
 
-def complex_differential_system(coherences_init_configs, time, parameters):
+def complex_differential_system(M, p, a, time, coherences_init_configs):
     """
     This module sets up the system of (2M by 2M) real-valued coupled differential equations:
     M = [ 0^{M},  M^{1}
@@ -297,6 +288,6 @@ def complex_differential_system(coherences_init_configs, time, parameters):
                      previous equation written in this module's documentation. 
     
     """
-    Mtensor = antidiagonal_2M2M_block_Mmatrix(parameters = parameters, time = time)
-    Mtensor_loc = np.asarray(Mtensor)
+    Mtensor = antidiagonal_2M2M_block_Mmatrix(M = M, p = p, a = a, time = time)
+    Mtensor_loc = np.array(Mtensor)
     return Mtensor_loc @ coherences_init_configs
